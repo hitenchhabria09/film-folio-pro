@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import jwt from 'jsonwebtoken';
+import { simpleJWT } from '@/utils/jwt';
 
 interface User {
   id: string;
@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const token = localStorage.getItem('cinemascape_token');
     if (token) {
       try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        const decoded = simpleJWT.verify(token, JWT_SECRET);
         const userData = localStorage.getItem(`user_${decoded.userId}`);
         if (userData) {
           setUser(JSON.parse(userData));
@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(`user_${newUser.id}`, JSON.stringify(newUser));
 
       // Generate JWT token
-      const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+      const token = simpleJWT.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
       localStorage.setItem('cinemascape_token', token);
 
       setUser(newUser);
@@ -102,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = JSON.parse(userData);
       
       // Generate JWT token
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+      const token = simpleJWT.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
       localStorage.setItem('cinemascape_token', token);
 
       setUser(user);
