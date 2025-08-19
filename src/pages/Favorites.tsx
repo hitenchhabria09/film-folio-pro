@@ -19,9 +19,11 @@ export const Favorites: React.FC = () => {
 
       setLoading(true);
       try {
-        const allMovies = await movieService.getAllMovies();
-        const favorites = allMovies.filter(movie => user.favorites.includes(movie.id));
-        setFavoriteMovies(favorites);
+        // Load movies from favorites by fetching each one individually
+        const moviePromises = user.favorites.map(id => movieService.getMovieById(id));
+        const movies = await Promise.all(moviePromises);
+        const validMovies = movies.filter(movie => movie !== null) as Movie[];
+        setFavoriteMovies(validMovies);
       } catch (error) {
         console.error('Failed to load favorite movies:', error);
       } finally {

@@ -1,56 +1,92 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { MovieGrid } from '@/components/movies/MovieGrid';
-import { movieService, Movie } from '@/services/movieService';
+import { movieService, Movie, MovieResponse } from '@/services/movieService';
+import { Film, TrendingUp, Award, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, TrendingUp, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { useInView } from 'react-intersection-observer';
 
 export const Dashboard: React.FC = () => {
-  const [allMovies, setAllMovies] = useState<Movie[]>([]);
-  const [filteredMovies, setFilteredMovies] = useState<Movie[]>([]);
+  const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'popular' | 'trending' | 'top-rated'>('popular');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
+
+  const { ref: loadMoreRef, inView } = useInView({
+    threshold: 0.1,
+    triggerOnce: false,
+  });
+
+  const loadMovies = useCallback(async (page: number = 1, isLoadMore: boolean = false) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setMovies([]);
+    }
+
+    try {
+      let response: MovieResponse;
+      
+      if (searchQuery.trim()) {
+        response = await movieService.searchMovies(searchQuery, page);
+      } else {
+        switch (activeTab) {
+          case 'top-rated':
+            response = await movieService.getTopRatedMovies(page);
+            break;
+          case 'popular':
+          default:
+            response = await movieService.getPopularMovies(page);
+            break;
+        }
+      }
+
+      if (isLoadMore) {
+        setMovies(prev => [...prev, ...response.results]);
+      } else {
+        setMovies(response.results);
+      }
+      
+      setCurrentPage(response.page);
+      setTotalPages(response.total_pages);
+      setHasNextPage(response.page < response.total_pages);
+    } catch (error) {
+      console.error('Failed to load movies:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [searchQuery, activeTab]);
 
   useEffect(() => {
-    const loadMovies = async () => {
-      setLoading(true);
-      try {
-        const movies = await movieService.getAllMovies();
-        setAllMovies(movies);
-        setFilteredMovies(movies);
-      } catch (error) {
-        console.error('Failed to load movies:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    loadMovies(1, false);
+  }, [loadMovies]);
 
-    loadMovies();
-  }, []);
+  // Infinite scroll effect
+  useEffect(() => {
+    if (inView && hasNextPage && !loading && !loadingMore) {
+      loadMovies(currentPage + 1, true);
+    }
+  }, [inView, hasNextPage, loading, loadingMore, currentPage, loadMovies]);
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    if (!query.trim()) {
-      setFilteredMovies(allMovies);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const searchResults = await movieService.searchMovies(query);
-      setFilteredMovies(searchResults);
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setLoading(false);
-    }
+    setCurrentPage(1);
+    // loadMovies will be called automatically by the useEffect
   };
 
-  const getPopularMovies = () => allMovies.filter(movie => movie.rating >= 8.0);
-  const getRecentMovies = () => allMovies.filter(movie => 
-    new Date(movie.releaseDate).getFullYear() >= 2023
-  );
+  const handleTabChange = (tab: 'popular' | 'trending' | 'top-rated') => {
+    setActiveTab(tab);
+    setSearchQuery('');
+    setCurrentPage(1);
+    // loadMovies will be called automatically by the useEffect
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,64 +94,83 @@ export const Dashboard: React.FC = () => {
       
       <main className="container mx-auto px-4 py-8">
         {/* Hero Section */}
-        <div className="mb-12 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-cinema-gold via-accent to-cinema-gold bg-clip-text text-transparent">
-              Discover Movies
-            </span>
+        <div className="text-center mb-12 py-16 bg-gradient-to-r from-cinema-red/10 via-cinema-gold/10 to-accent/10 rounded-3xl border border-border/50">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-16 h-16 bg-gradient-to-br from-cinema-red to-cinema-gold rounded-full flex items-center justify-center shadow-lg">
+              <Film className="w-8 h-8 text-white" />
+            </div>
+          </div>
+          <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-cinema-gold via-accent to-cinema-red bg-clip-text text-transparent">
+            CinemaScape Explorer
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Explore, rate, and save your favorite films in your personal cinema collection
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            Discover, explore, and curate your perfect movie collection. 
+            From blockbusters to hidden gems, your cinematic journey starts here.
           </p>
         </div>
 
-        {/* Content */}
-        {searchQuery ? (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-semibold">Search Results</h2>
-              <span className="text-muted-foreground">for "{searchQuery}"</span>
-            </div>
-            <MovieGrid movies={filteredMovies} loading={loading} />
+        {/* Search Results Header */}
+        {searchQuery && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold mb-2">
+              Search Results for "{searchQuery}"
+            </h2>
+            <Badge variant="secondary" className="text-sm">
+              {movies.length} movies found
+            </Badge>
           </div>
-        ) : (
-          <Tabs defaultValue="all" className="space-y-8">
-            <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 bg-cinema-surface border border-cinema-gold/20">
-              <TabsTrigger value="all" className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                All Movies
-              </TabsTrigger>
-              <TabsTrigger value="popular" className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Popular
-              </TabsTrigger>
-              <TabsTrigger value="recent" className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Recent
-              </TabsTrigger>
-            </TabsList>
+        )}
 
-            <TabsContent value="all">
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold">All Movies</h2>
-                <MovieGrid movies={allMovies} loading={loading} />
-              </div>
-            </TabsContent>
+        {/* Category Tabs */}
+        {!searchQuery && (
+          <div className="flex flex-wrap gap-4 mb-8 justify-center">
+            <Button
+              variant={activeTab === 'popular' ? 'default' : 'outline'}
+              onClick={() => handleTabChange('popular')}
+              className="flex items-center gap-2"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Popular Movies
+            </Button>
+            <Button
+              variant={activeTab === 'trending' ? 'default' : 'outline'}
+              onClick={() => handleTabChange('trending')}
+              className="flex items-center gap-2"
+            >
+              <Film className="w-4 h-4" />
+              Trending
+            </Button>
+            <Button
+              variant={activeTab === 'top-rated' ? 'default' : 'outline'}
+              onClick={() => handleTabChange('top-rated')}
+              className="flex items-center gap-2"
+            >
+              <Award className="w-4 h-4" />
+              Top Rated
+            </Button>
+          </div>
+        )}
 
-            <TabsContent value="popular">
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold">Popular Movies</h2>
-                <MovieGrid movies={getPopularMovies()} loading={loading} />
-              </div>
-            </TabsContent>
+        {/* Movies Grid */}
+        <MovieGrid movies={movies} loading={loading} />
 
-            <TabsContent value="recent">
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold">Recent Releases</h2>
-                <MovieGrid movies={getRecentMovies()} loading={loading} />
+        {/* Load More Trigger */}
+        {hasNextPage && !loading && (
+          <div ref={loadMoreRef} className="flex justify-center py-8">
+            {loadingMore && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading more movies...
               </div>
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
+        )}
+
+        {/* End of Results */}
+        {!loading && !hasNextPage && movies.length > 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>You've reached the end of the results</p>
+          </div>
         )}
       </main>
     </div>
